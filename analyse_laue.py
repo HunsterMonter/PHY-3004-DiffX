@@ -19,12 +19,10 @@ def laue_import(distance_cristal: float, fichier: bytes, cristal: str) -> pd.Dat
     L = distance_cristal
     a = cristaux[cristal]
 
-    data = pd.read_csv(os.fsdecode(fichier))
-    data.set_index(" ", inplace=True)
-    data.drop(["Area", "Mean", "Min", "Max"], axis=1, inplace=True)
+    data = pd.read_csv(os.fsdecode(fichier), index_col=0)
 
-    data["X"] = (data["X"] - data.loc[1, "X"]) / 1e6
-    data["Y"] = (data["Y"] - data.loc[1, "Y"]) / 1e6
+    #data["X"] = (data["X"] - data.loc[1, "X"])
+    #data["Y"] = (data["Y"] - data.loc[1, "Y"])
     data["Z"] = (np.sqrt(data["X"]**2 + data["Y"]**2 + L**2) - L + 1e-308)
 
     data["u"] = data["X"] / data["Z"]
@@ -56,7 +54,7 @@ def laue_mass_import(cristal: str):
             resultats = os.path.join(resultats_dir, fichier)
 
             distance_str = os.fsdecode(fichier).split("_")[1]
-            distance = float(re.findall("\d+", distance_str)[0]) * 1e-3
+            distance = float(re.findall("\d+", distance_str)[0])
 
             laue_import(distance, data, cristal).to_csv(os.fsdecode(resultats))
 
@@ -76,7 +74,7 @@ def laue_graph(cristal: str):
             image = os.path.join(images_dir, image_name)
 
             index += 1
-            data = pd.read_csv(os.fsdecode(resultats))
+            data = pd.read_csv(os.fsdecode(resultats), index_col=0)
             mean_values = pd.DataFrame({"Nom": os.fsdecode(fichier), "Moyenne": data["lambda_error"].mean(), 
                                         "Écart type": data["lambda_error"].std()}, index = [index])
             mean_dataframe = pd.concat([mean_dataframe, mean_values], ignore_index=True)
