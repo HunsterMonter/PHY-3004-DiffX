@@ -16,7 +16,7 @@ def gaussienne2D(xy, A, mu_x, mu_y, sigma_x, sigma_y):
     return f.ravel()
 
 
-def find_peaks(filename: bytes, per: float, x0: float, y0: float, fig):
+def find_peaks(filename: bytes, per: float, x0: float, y0: float, fig, drop):
     img = imageio.v3.imread(os.fsdecode(filename))
 
     # Enlève les petites taches blanches parasites
@@ -51,8 +51,16 @@ def find_peaks(filename: bytes, per: float, x0: float, y0: float, fig):
     # Détermine le centre de l'image
     df["r"] = np.sqrt((df["x"] - x0)**2 + (df["y"] - y0)**2)
     df.sort_values("r", inplace=True, ignore_index=True)
-    x_centre = df["x"][0]
-    y_centre = df["y"][0]
+
+    [df.drop(index=i, inplace=True) for i in drop]
+    df.reset_index(drop=True, inplace=True)
+
+    if df["r"][0] < 75:
+        x_centre = df["x"][0]
+        y_centre = df["y"][0]
+    else:
+        x_centre = x0
+        y_centre = y0
 
     # Enlève les faux positifs sur le halo près du centre
     # et les faux positifs sur les bords de l'image
@@ -149,12 +157,18 @@ def find_peaks(filename: bytes, per: float, x0: float, y0: float, fig):
     sigma_y = np.array(sigma_y)
 
     # Distances à partir du centre en mm
-    df["X"] = 49.5/1000 * (mu_x - mu_x[0])
-    df["Y"] = 49.5/1000 * (mu_y - mu_y[0])
-    df["sigmaX"] = 49.5/1000 * np.sqrt(sigma_x**2 + sigma_x[0]**2)
-    df["sigmaY"] = 49.5/1000 * np.sqrt(sigma_y**2 + sigma_y[0]**2)
-    df.loc[0, "sigmaX"] = 0
-    df.loc[0, "sigmaY"] = 0
+    if df["r"][0] < 0.1:
+        df["X"] = 49.5/1000 * (mu_x - mu_x[0])
+        df["Y"] = 49.5/1000 * (mu_y - mu_y[0])
+        df["sigma_X"] = 49.5/1000 * np.sqrt(sigma_x**2 + sigma_x[0]**2)
+        df["sigma_Y"] = 49.5/1000 * np.sqrt(sigma_y**2 + sigma_y[0]**2)
+        df.loc[0, "sigma_X"] = 0
+        df.loc[0, "sigma_Y"] = 0
+    else:
+        df["X"] = 49.5/1000 * (mu_x - x_centre)
+        df["Y"] = 49.5/1000 * (mu_y - y_centre)
+        df["sigma_X"] = 49.5/1000 * sigma_x**2
+        df["sigma_Y"] = 49.5/1000 * sigma_y**2
 
     X = np.linspace(515, 544, 30)
     Y = np.linspace(615, 644, 30)
@@ -194,24 +208,18 @@ def find_peaks(filename: bytes, per: float, x0: float, y0: float, fig):
     plt.ylabel("Death level")
     plt.show()
     """
+    print(df)
 
     return df, fig
 
 
 def main():
-    # Assigner la persistance minimale si on reçoit un argument en ligne de commande
+    # Index à enlever pour les faux positifs
     try:
-        per = float(sys.argv[1])
+        index = list(sys.argv[1:])
+        index = [int(x)-1 for x in index]
     except:
-        per = 20
-
-    # Assigner la position du pic central si on reçoit 3 arguments en ligne de commande
-    try:
-        x0 = float(sys.argv[2])
-        y0 = float(sys.argv[3])
-    except:
-        x0 = 576
-        y0 = 650
+        index = []
 
     cristal = "Si"
 
@@ -219,6 +227,7 @@ def main():
     Figs = os.fsencode(f"Data/{cristal}/Figs")
     Data = os.fsencode(f"Data/{cristal}")
 
+    """
     for file in os.listdir(Images):
         file = os.fsdecode(file)
         if os.fsdecode(file).endswith(".tif"):
@@ -240,9 +249,14 @@ def main():
             # N'affiche pas les images quand on processe toutes les images
             #plt.show()
 
-            df[["X", "Y", "sigmaX", "sigmaY"]].to_csv(os.fsdecode(csv))
+            df[["X", "Y", "sigma_X", "sigma_Y"]].to_csv(os.fsdecode(csv))
     """
-    file = "nacl_10mm_35kVp_80images"
+    file = "si_10mm_35kVp_80images"
+    per = 20
+    #x0 = 576
+    #y0 = 650
+    x0 = 585
+    y0 = 650
 
     imgname = os.fsencode(file + ".tif")
     figname = os.fsencode(file + f"_{int(per)}per.pdf")
@@ -252,16 +266,16 @@ def main():
     fig = os.path.join(Figs, figname)
     csv = os.path.join(Data, csvname)
 
+
     f = plt.figure(layout="constrained")
-    df, f = find_peaks(img, per, x0, y0, f)
+    df, f = find_peaks(img, per, x0, y0, f, index)
 
     # Sauvegarde et affiche la figure avec les pics identifiés
     # Permet d'ajuster les paramètres pour une image en particulier
     plt.savefig(os.fsdecode(fig))
     plt.show()
 
-    df[["X", "Y", "sigmaX", "sigmaY"]].to_csv(os.fsdecode(csv))
-    """
+    df[["X", "Y", "sigma_X", "sigma_Y"]].to_csv(os.fsdecode(csv))
 
 
 if __name__ == "__main__":

@@ -16,17 +16,19 @@ plt.rcParams.update({'font.size': 16})
 cristaux = {"NaCl": 564.02, "LiF": 402.80, "Si": 543.10}
 
 def laue_import(distance_cristal: float, fichier: bytes, cristal: str) -> pd.DataFrame:
-    L = distance_cristal
+    L = distance_cristal+8
+    sigma_L = 2
     a = cristaux[cristal]
 
     data = pd.read_csv(os.fsdecode(fichier), index_col=0)
 
-    #data["X"] = (data["X"] - data.loc[1, "X"])
-    #data["Y"] = (data["Y"] - data.loc[1, "Y"])
     data["Z"] = (np.sqrt(data["X"]**2 + data["Y"]**2 + L**2) - L + 1e-308)
 
     data["u"] = data["X"] / data["Z"]
     data["v"] = data["Y"] / data["Z"]
+
+    data["sigma_u"] = np.sqrt((data["X"]**2 - data["Z"]*(data["Z"]+L))**2 * data["sigma_X"]**2 + (data["X"]*data["Y"])**2 * data["sigma_Y"]**2 + (data["X"]*data["Z"])**2 * sigma_L**2) / (data["Z"]**2 * (data["Z"] + L))
+    data["sigma_v"] = np.sqrt((data["X"]*data["Y"])**2 * data["sigma_X"]**2 + (data["Y"]**2 - data["Z"]*(data["Z"]+L))**2 * data["sigma_Y"]**2 + (data["Y"]*data["Z"])**2 * sigma_L**2) / (data["Z"]**2 * (data["Z"] + L))
 
     data["h"] = np.rint(data["u"]).astype("int64")
     data["k"] = np.rint(data["v"]).astype("int64")
@@ -97,11 +99,13 @@ def laue_graph(cristal: str):
             plt.style.use("ggplot")
             plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
             plt.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
-            plt.scatter(data["u"], data["v"])
+            #plt.scatter(data["u"], data["v"])
+            plt.errorbar(data["u"], data["v"], xerr=data["sigma_u"], yerr=data["sigma_v"], fmt="o")
             plt.xlabel(r"$u=h/l$")
             plt.ylabel(r"$v=k/l$")
-            plt.title(table_title)
+            #plt.title(table_title)
             plt.savefig(os.fsdecode(image))
+            plt.close()
 
             # Imprime le tableau de l'annexe B
             #print(mean_dataframe.to_latex(label="tab:tableau_erreurs_moyennes", column_format="|l|r|r|r|"))
@@ -115,6 +119,8 @@ def main():
 
     # Affiche les graphiques et les tableaux
     laue_graph("NaCl")
+    laue_graph("LiF")
+    laue_graph("Si")
 
     #plt.show()
 
