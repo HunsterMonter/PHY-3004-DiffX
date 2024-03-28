@@ -1,0 +1,115 @@
+from matplotlib.ticker import StrMethodFormatter
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+import numpy as np
+import os
+import pandas as pd
+import re
+
+plt.rcParams.update({'font.size': 28, 'lines.linewidth': 3, 
+                    'figure.figsize':[16.0, 9.0], 'figure.dpi':75,
+                    'lines.markersize':15})
+image = np.array([1,5,10,20,40,80])
+distance =np.array([5, 10, 15, 20, 25])
+énergie = np.array([20,25,30,35])
+
+snr_image = np.array([5.962861688515425, 6.472190596283548, 6.875685387861778, 7.505197066993581, 7.8498084450357455, 9.198279756789274])
+snr_distance =  np.array([6.653396226973173,6.875685387861778, 6.439141783243401, 7.172684182319899, 7.147208354849024])
+
+snr_énergie =  np.array([1.5990905052275417, 3.4908347308812857, 5.974334446299004, 6.875685387861778])
+cnr_image =  np.array([4.984432890079234, 5.491187104853145, 5.774718869588501, 6.190274294490825, 6.084866803332933, 6.748122737142089])
+cnr_distance =  np.array([5.992389584269354,5.774718869588501, 5.666871907843282, 6.437410174255977, 6.522742601398231])
+cnr_énergie =  np.array([1.1536455766587614, 2.794100826012437, 5.248135810557777, 5.774718869588501])
+print(np.std(snr_distance)/np.mean(snr_distance)*100,np.std(cnr_distance)/np.mean(snr_distance)*100 )
+snr_énergie_si= np.array([4.662233199167624, 2.921776215068604, 3.943901799785409, 8.177602118184925])
+cnr_énergie_si= np.array([0.3443830789114199, 0.4052520429211348, 1.5857770205255894, 2.7623985657839163])
+snr_énergie_lif= np.array([7.401027840889959, 11.17974721452548, 11.871830109847744, 9.421537102944656])
+cnr_énergie_lif= np.array([3.4037870526222216, 6.621950699906926, 7.244241237627163, 8.401991956590129])
+
+
+
+
+def racine(x,a,b):
+    return a*np.sqrt(x)+b
+
+def fit(function, abscisse, ordonnées):
+    x= np.linspace(abscisse[0]-2,abscisse[-1]+2,100)
+    popt, pcov = curve_fit(function, abscisse, ordonnées)
+    fit = function(x, *popt)
+    err = np.sqrt(np.diag(pcov))
+    sigma_y= np.sqrt(abs(x)*pcov[0,0]+pcov[1,1]+ 2*np.sqrt(x)*pcov[0,1])
+    fit_max = fit+2*sigma_y
+    popt_min= popt-np.sqrt(np.diag(pcov))
+    fit_min = fit-2*sigma_y
+    
+    return popt, fit,err, fit_max, fit_min,x,pcov
+
+
+
+
+
+def graph(abs, ord,cristal,i):
+
+    dico= {"NaCl": ("tab:orange","o","-","1"), "LiF": ("tab:blue","^","--",2), "Si": ("tab:green", "s", "-.",3),"CNR":("tab:orange","o","-",1),"SNR":("tab:blue","s","--",2)}
+    plt.scatter(abs, ord, label=cristal, color=dico[cristal][0], marker=dico[cristal][1])
+    arg, func, incert, func_max, func_min,x,sigma = fit(racine, abs, ord)
+    plt.plot(x, func , label=f"$a_{i}\sqrt{{x}}+b_{i}$", linestyle=dico[cristal][2], color=dico[cristal][0])
+    plt.fill_between(x, func_max, func_min, alpha=0.2, label="intervalle de confiance,{}".format(cristal), color=dico[cristal][0])
+    plt.legend(fontsize=21)
+    plt.tick_params(direction='in')
+    return f"({round(arg[0],2)}$\pm${round(incert[0],2)})$\sqrt{{x}}$({round(arg[1],2)}$\pm${round(incert[0],2)})" "\n" f"covariance: {sigma}"
+
+
+
+def main():
+    print(graph(énergie, snr_énergie, "NaCl",1))
+    print(graph(énergie, snr_énergie_lif, "LiF",2))
+    print(graph(énergie, snr_énergie_si, "Si",3))
+    plt.xlabel("Énergie [kVp]")
+    plt.ylabel("SNR [-]")
+    plt.show()
+    print(graph(énergie, cnr_énergie, "NaCl",4))
+    print(graph(énergie, cnr_énergie_lif, "LiF",5))
+    print(graph(énergie, cnr_énergie_si, "Si",6))
+    plt.xlabel("Énergie [kVp]")
+    plt.ylabel("CNR [-]")
+    plt.show()
+    print(graph(image,snr_image, "SNR",7))
+    print(graph(image,cnr_image, "CNR",8))
+    plt.xlabel("Nombre d'images moyennées [-]")
+    plt.ylabel("SNR ou CNR [-]")
+    plt.show()
+
+
+#x= np.linspace(distance[0]-2, distance[-1], 100)
+#popt, pcov = curve_fit(racine, distance, snr_distance)
+#fit = racine(x, *popt)
+#incert= np.sqrt(np.diag(pcov))
+#plt.scatter(distance, snr_distance, label="SNR", color="tab:blue", marker="s")
+#plt.plot(x, fit, label=f"({round(popt[0],2)}$\pm${round(np.sqrt(pcov[0,0]),2)})$\sqrt{{x}}$+({round(popt[1],2)}$\pm${round(np.sqrt(pcov[1,1]),2)})", linestyle="--", color="tab:blue")
+
+#poptcnr, pcovcr = curve_fit(racine, distance, cnr_distance)
+#fit = racine(x, *poptcnr)
+#incertcnr= np.sqrt(np.diag(pcov))
+#plt.scatter(distance, cnr_distance, label="CNR", color="tab:orange", marker="o")
+#plt.plot(x, fit, label=f"({round(poptcnr[0],2)}$\pm${round(np.sqrt(pcov[0,0]),2)})$\sqrt{{x}}$+({round(popt[1],2)}$\pm${round(np.sqrt(pcov[1,1]),2)})", linestyle="-", color="tab:orange")
+
+#print(f"SNR: {popt[0]}+-{incert[0]}sqrt(x)+{popt[1]}+-{incert[1]}"
+#    f"\nCNR: {popt[0]}+-{incertcnr[0]}sqrt(x)+{popt[1]}+-{incertcnr[1]}")
+#print(pcov,pcovcr)
+#plt.xlabel("Distance [mm]")
+#plt.ylabel("SNR ou CNR [-]")
+#plt.legend()
+#plt.show()
+
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
