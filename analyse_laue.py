@@ -16,17 +16,20 @@ plt.rcParams.update({'font.size': 16})
 cristaux = {"NaCl": 564.02, "LiF": 402.80, "Si": 543.10}
 
 def laue_import(distance_cristal: float, fichier: bytes, cristal: str) -> pd.DataFrame:
-    L = distance_cristal
+    L = distance_cristal+8
+    sigma_L = 2
     a = cristaux[cristal]
 
     data = pd.read_csv(os.fsdecode(fichier), index_col=0)
 
-    #data["X"] = (data["X"] - data.loc[1, "X"])
-    #data["Y"] = (data["Y"] - data.loc[1, "Y"])
     data["Z"] = (np.sqrt(data["X"]**2 + data["Y"]**2 + L**2) - L + 1e-308)
+    r = np.sqrt(data["X"]**2 + data["Y"]**2)
 
     data["u"] = data["X"] / data["Z"]
     data["v"] = data["Y"] / data["Z"]
+
+    data["sigma_u"] = np.sqrt((data["X"]**2 - data["Z"]*(data["Z"]+L))**2 * data["sigma_X"]**2 + (data["X"]*data["Y"])**2 * data["sigma_Y"]**2 + (data["X"]*data["Z"])**2 * sigma_L**2) / (data["Z"]**2 * (data["Z"] + L))
+    data["sigma_v"] = np.sqrt((data["X"]*data["Y"]*data["sigma_X"])**2 + (data["Y"]**2-data["Z"]*(data["Z"]+L))**2*data["sigma_Y"]**2 + (data["Y"]*data["Z"]*sigma_L)**2) / (data["Z"]**2 * (data["Z"] + L))
 
     data["h"] = np.rint(data["u"]).astype("int64")
     data["k"] = np.rint(data["v"]).astype("int64")
@@ -38,9 +41,35 @@ def laue_import(distance_cristal: float, fichier: bytes, cristal: str) -> pd.Dat
     data["n"] = data["h"]**2 + data["k"]**2 + data["l"]**2
     data["d_hkl"] = a / np.sqrt(data["h"]**2 + data["k"]**2 + data["l"]**2)
 
-    data["lambda_exp"] = 2 * data["d_hkl"] * np.sin(0.5 * np.arctan(np.sqrt(data["X"]**2 + data["Y"]**2) / L))
+    data["theta"] = 0.5 * np.arctan(r/L)
+    data["sigma_theta"] = np.sqrt((L*data["X"]*data["sigma_X"])**2 + (L*data["Y"]*data["sigma_Y"])**2 + (r**2*sigma_L)**2) / (2*r*(r**2+L**2))
+
     data["lambda_the"] = 2 * data["d_hkl"] * np.sin(np.arctan (data["l"] / np.sqrt (data["h"]**2 + data["k"]**2)))
+    data["lambda_exp"] = 2 * data["d_hkl"] * np.sin(0.5 * np.arctan(np.sqrt(data["X"]**2 + data["Y"]**2) / L))
+    data["sigma_lambda"] = np.sqrt(4*data["d_hkl"]**2-data["lambda_exp"]**2) * data["sigma_theta"]
     data["lambda_error"] = np.abs((data["lambda_exp"] - data["lambda_the"]) / data["lambda_the"]) * 100
+
+    minmax_csv = os.fsencode("Resultats/minmax.csv")
+    minmax = pd.read_csv(os.fsdecode(minmax_csv), index_col=0)
+    nom = os.fsdecode(os.path.basename(fichier)).removesuffix(".csv")
+    i = minmax.index[minmax["Nom"] == nom].tolist()
+
+    theta_max = np.max(data["theta"])
+    i_theta_max = data.index[data["theta"] == theta_max].tolist()[0]
+    sigma_theta_max = data["sigma_theta"].loc[i_theta_max]
+
+    lambda_min = np.min(data["lambda_the"])
+    i_lambda_min = data.index[data["lambda_the"] == lambda_min].tolist()[0]
+    sigma_lambda_min = data["sigma_lambda"].loc[i_lambda_min]
+
+    if i:
+        index = i[0]
+        minmax.loc[index] = [nom, 180*theta_max/np.pi, 180*sigma_theta_max/np.pi, lambda_min, sigma_lambda_min]
+    else:
+        temp = pd.DataFrame({"Nom": nom, "theta_max": 180*theta_max/np.pi, "sigma_theta_max": 180*sigma_theta_max/np.pi, "lambda_min": lambda_min, "sigma_lambda_min": sigma_lambda_min}, index=[len(minmax)])
+        minmax = pd.concat([minmax, temp], ignore_index=True)
+
+    minmax.to_csv(os.fsdecode(minmax_csv))
 
     return data
 
@@ -93,15 +122,16 @@ def laue_graph(cristal: str):
             # Imprime les données brutes en LaTeX
             #print(data.to_latex(columns=["X", "Y", "Z", "u", "v", "h", "k", "l", "n", "d_hkl", "lambda_exp", "lambda_the", "lambda_error"], caption=table_title, label="tab:" + os.fsdecode(fichier) column_format="ccccccccccccc"))
             
-            plt.figure(figsize=(7,7))
-            plt.style.use("ggplot")
+            plt.figure(figsize=(7,7), layout="constrained")
             plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
             plt.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
-            plt.scatter(data["u"], data["v"])
+            #plt.scatter(data["u"], data["v"])
+            plt.errorbar(data["u"], data["v"], xerr=data["sigma_u"], yerr=data["sigma_v"], fmt="o")
             plt.xlabel(r"$u=h/l$")
             plt.ylabel(r"$v=k/l$")
-            plt.title(table_title)
+            plt.tick_params(direction="in")
             plt.savefig(os.fsdecode(image))
+            plt.close()
 
             # Imprime le tableau de l'annexe B
             #print(mean_dataframe.to_latex(label="tab:tableau_erreurs_moyennes", column_format="|l|r|r|r|"))
@@ -115,6 +145,8 @@ def main():
 
     # Affiche les graphiques et les tableaux
     laue_graph("NaCl")
+    laue_graph("LiF")
+    laue_graph("Si")
 
     #plt.show()
 
