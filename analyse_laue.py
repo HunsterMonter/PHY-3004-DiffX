@@ -122,15 +122,14 @@ def laue_graph(cristal: str):
             # Imprime les données brutes en LaTeX
             #print(data.to_latex(columns=["X", "Y", "Z", "u", "v", "h", "k", "l", "n", "d_hkl", "lambda_exp", "lambda_the", "lambda_error"], caption=table_title, label="tab:" + os.fsdecode(fichier) column_format="ccccccccccccc"))
             
-            plt.figure(figsize=(7,7))
-            plt.style.use("ggplot")
+            plt.figure(figsize=(7,7), layout="constrained")
             plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
             plt.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
             #plt.scatter(data["u"], data["v"])
             plt.errorbar(data["u"], data["v"], xerr=data["sigma_u"], yerr=data["sigma_v"], fmt="o")
             plt.xlabel(r"$u=h/l$")
             plt.ylabel(r"$v=k/l$")
-            #plt.title(table_title)
+            plt.tick_params(direction="in")
             plt.savefig(os.fsdecode(image))
             plt.close()
 
