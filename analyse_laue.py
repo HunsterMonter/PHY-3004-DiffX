@@ -4,12 +4,14 @@
 https://github.com/juham58/PHY-3003---Diffraction-rayons-X
 """
 
+from functools import partial
 from matplotlib.ticker import StrMethodFormatter
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
 import re
+import sigfig
 
 plt.rcParams.update({'font.size': 16})
 
@@ -117,11 +119,8 @@ def laue_graph(cristal: str):
             nb_images_str = os.fsdecode(fichier).split("_")[3]
             nb_images = re.findall("\d+", nb_images_str)[0]
 
-            table_title = f"Données acquises avec le cristal de {cristal}, à une distance de {distance} mm, \nune tension au pic de {voltage} kV et un nombre d'images moyennées de {nb_images}."
+            caption = f"Données acquises avec le cristal de {cristal}, à une distance de \\SI{{{distance}}}{{\\mm}}, \nune tension au pic de \\SI{{{voltage}}}{{\\kilo\\V p}} et un nombre d'images moyennées de {nb_images}."
 
-            # Imprime les données brutes en LaTeX
-            #print(data.to_latex(columns=["X", "Y", "Z", "u", "v", "h", "k", "l", "n", "d_hkl", "lambda_exp", "lambda_the", "lambda_error"], caption=table_title, label="tab:" + os.fsdecode(fichier) column_format="ccccccccccccc"))
-            
             plt.figure(figsize=(7,7), layout="constrained")
             plt.gca().yaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
             plt.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
@@ -133,8 +132,29 @@ def laue_graph(cristal: str):
             plt.savefig(os.fsdecode(image))
             plt.close()
 
-            # Imprime le tableau de l'annexe B
-            #print(mean_dataframe.to_latex(label="tab:tableau_erreurs_moyennes", column_format="|l|r|r|r|"))
+            def fmt_sig(string):
+                return "\\num{" + str(sigfig.round(string, sigfigs=2)) + "}"
+
+            def fmt_inc(string, val, err):
+                index = data[data[val] == string].index[0]
+                return "\\num{" + str(sigfig.round(string, uncertainty=data[err][index], separation="\\pm")) + "}"
+
+            columns = ["X", "Y", "Z", "u", "v", "h", "k", "l", "n", "d_hkl", "theta", "lambda_the", "lambda_exp"]
+            header = ["$x_Q$", "$y_Q$", "$z_Q$", "$u$", "$v$", "$h$", "$k$", "$l$", "$n$", "$d_hkl$", "$\\theta$", "$\\lambda\\irm{{the}}$", "$\\lambda\\irm{{exp}}$"]
+            formatters = {"X": partial(fmt_inc, val="X", err="sigma_X"),
+                          "Y": partial(fmt_inc, val="Y", err="sigma_Y"),
+                          "Z": fmt_sig,
+                          "u": partial(fmt_inc, val="u", err="sigma_u"),
+                          "v": partial(fmt_inc, val="v", err="sigma_v"),
+                          "d_hkl": fmt_sig,
+                          "theta": partial(fmt_inc, val="theta", err="sigma_theta"),
+                          "lambda_the": fmt_sig,
+                          "lambda_exp": partial(fmt_inc, val="lambda_exp", err="sigma_lambda")}
+            column_format = "cccccccccccccc"
+
+            # Imprime le tableau de l'annexe B, il est nécessaire de supprimer tables.tex avant de rouler le programme
+            with open("tables.tex", "a") as tex:
+                print(data.iloc[1: , :].to_latex(caption=caption, columns=columns, header=header, column_format=column_format, formatters=formatters, position="H"), file=tex)
 
 
 def main():
